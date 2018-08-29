@@ -13,35 +13,107 @@
 
 ssize_t (*orig_write)(int , const void *, size_t ) = NULL;
 ssize_t (*orig_read)(int , void *, size_t ) = NULL;
-//int (*orig_open)(char* , int, mode_t ) = NULL;
 int (*orig_open)(char* , int, ... ) = NULL;
+int (*orig_open64)(char* , int, mode_t ) = NULL;
 int (*orig_ioctl)(int d , unsigned long request,...) = NULL;
-//int (*orig_ioctl)(int d , unsigned long request, void* ) = NULL;
 int (*orig_fcntl)(int fd , int cmd,...) = NULL;
 FILE* (*orig_fopen)(const char* , const char* ) = NULL;
-//int (*orig_stat)(const char *path, struct stat *buf)=NULL;
-int (*orig__xstat)(int ver, const char * path, struct stat * stat_buf)=NULL;
+int (*orig__xstat)(int ver, const char * path, struct stat * stat_buf)=NULL; // ver=3 --> normal stat()
 
+char blackListedStr[][256]={"hsperfdata",".jar","/jre"};
+
+bool isBlacklisted(char* aName)
+{
+	if ( NULL==strstr(aName, blackListedStr[0]) 
+		&& NULL==strstr(aName, blackListedStr[1])
+	    && NULL==strstr(aName, blackListedStr[2])
+	)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+	
+}
 void printDebug(char* printThis)
 {
 	(*orig_write)(1,printThis,strlen(printThis));
 }
 
-extern "C" ssize_t read(int fd, void *buf, size_t count)
-{
-	if ( orig_read == NULL )
-        orig_read = (ssize_t (*)(int , void *, size_t))dlsym(RTLD_NEXT, "read");
 
-	char wrbuf[PATH_MAX];
-	char lnkbuf[PATH_MAX];
+// Hook for java app (large files)
+extern "C" int open64(char* fname, int flags, mode_t mode)
+{
+	// !! Seems that a java app won't call this function on file open
+	// inside the app.
+	// On the other hand, java.exe seems to call open, e.g to open the jar file
+	// to be executed.
+	
+	if ( orig_write == NULL )
+        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
+	if ( orig_open64 == NULL )
+        orig_open64 = (int (*)(char* , int, mode_t))dlsym(RTLD_NEXT, "open64");
+
+	if ( false==isBlacklisted(fname) )
+	{
+		char wrbuf[PATH_MAX];
+		memset(wrbuf,0,PATH_MAX);
+		wrbuf[0]='\n';
+		wrbuf[1]='6';
+		wrbuf[2]='4';
+		wrbuf[3]='\n';	
+		printDebug(wrbuf);
+		printDebug(fname);
+		wrbuf[0]='\n';
+		wrbuf[1]='4';
+		wrbuf[2]='6';
+		wrbuf[3]='\n';	
+		printDebug(wrbuf);
+		
+		// test on RO dir path of a file  (use dirname)
+
+		struct stat fileStat;
+		char* ts1 = strdup(fname); // str duplicate, no need to free mem!
+		stat( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
+	
+		if ( (fileStat.st_mode & S_IWUSR) == 0 &&  (fileStat.st_mode & S_IRUSR) )
+		{
+			wrbuf[0]='\n';
+			wrbuf[1]='R';
+			wrbuf[2]='O';
+			wrbuf[3]='\n';
+			printDebug(wrbuf);
+		}
+		else
+		{
+		} 
+    
+    }
+   	
+    return (*orig_open64)(fname, flags, mode );
+
+}
+
+extern "C" int open(char* fname, int flags, ...)
+{
+	// !! Seems that a java app won't call this function on file open
+	// inside the app.
+	// On the other hand, java.exe seems to call open, e.g to open the jar file
+	// to be executed.
+	
+	if ( orig_write == NULL )
+        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
+	if ( orig_open == NULL )
+        orig_open = (int (*)(char* , int, ...))dlsym(RTLD_NEXT, "open");
+
+	// test on RO dir path of a file  (use dirname)
+    char wrbuf[PATH_MAX];
 	memset(wrbuf,0,PATH_MAX);
-	memset(lnkbuf,0,PATH_MAX);
-    snprintf(wrbuf,PATH_MAX,"/proc/%d/fd/%d",getpid(),fd);
-	readlink(wrbuf, lnkbuf, PATH_MAX);
-	int temp=strlen(lnkbuf);
-	lnkbuf[temp]='\n';
 	/*struct stat fileStat;
-	char* ts1 = strdup(lnkbuf); // str duplicate, no need to free mem!
+	char fnameTest[] = "/proc/sys/fs/file-nr";
+	char* ts1 = strdup(fnameTest); // str duplicate, no need to free mem!
 	stat( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
 
 	if ( (fileStat.st_mode & S_IWUSR) == 0 &&  (fileStat.st_mode & S_IRUSR) )
@@ -51,31 +123,31 @@ extern "C" ssize_t read(int fd, void *buf, size_t count)
 		wrbuf[2]='\n';
 		printDebug(wrbuf);
 	}*/
-	
-	char blackListedStr[]="hsperfdata";
-	if (NULL==strstr(lnkbuf, blackListedStr))
+
+	if ( false==isBlacklisted(fname) )
 	{
-		wrbuf[0]='\n';
-		wrbuf[1]='L';
-		wrbuf[2]='N';
-		wrbuf[3]='R';
-		wrbuf[4]='\n';
-		wrbuf[5]=0;
-		//wrbuf[0]=wrbuf[6];
-		//wrbuf[1]=wrbuf[7];
-		//wrbuf[2]=wrbuf[8];
-		//wrbuf[3]=wrbuf[9];
-		//wrbuf[4]='\n';
-		//wrbuf[5]=0;
-		printDebug(wrbuf);
-		printDebug(lnkbuf);
-		return (*orig_read)(fd, buf, count);
-	}
-	else
-	{	
-		return 0;	
-	}
-	
+	wrbuf[0]='\n';
+	wrbuf[1]='-';
+	wrbuf[2]='-';
+	wrbuf[3]='\n';	
+	printDebug(wrbuf);
+	printDebug(fname);
+	wrbuf[0]='\n';
+	wrbuf[1]='+';
+	wrbuf[2]='+';
+	wrbuf[3]='\n';	
+    printDebug(wrbuf);
+    }
+    
+    mode_t a;
+    va_list ap;
+    va_start(ap, flags);
+    a = va_arg(ap, mode_t);
+    va_end(ap);
+    if (a!=0)
+    	return (*orig_open)(fname, flags, a );
+    else
+    	return (*orig_open)(fname, flags );
 
 }
 
@@ -104,8 +176,7 @@ extern "C" ssize_t write(int fd, const void *buf, size_t count)
 		printDebug(wrbuf);
 	}
 	
-	char blackListedStr[]="hsperfdata";
-	if (NULL==strstr(lnkbuf, blackListedStr))
+	if (false==isBlacklisted(lnkbuf))
 	{
 		wrbuf[0]='\n';
 		wrbuf[1]='L';
@@ -131,24 +202,23 @@ extern "C" ssize_t write(int fd, const void *buf, size_t count)
 
 }
 
-extern "C" int open(char* fname, int flags, ...)
-{
-	// !! Seems that a java app won't call this function on file open
-	// inside the app.
-	// On the other hand, java.exe seems to call open, e.g to open the jar file
-	// to be executed.
-	
-	if ( orig_write == NULL )
-        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
-	if ( orig_open == NULL )
-        orig_open = (ssize_t (*)(char* , int, ...))dlsym(RTLD_NEXT, "open");
+#if _THESE_HOOK_USED_
 
-	// test on RO dir path of a file  (use dirname)
-    char wrbuf[PATH_MAX];
+extern "C" ssize_t read(int fd, void *buf, size_t count)
+{
+	if ( orig_read == NULL )
+        orig_read = (ssize_t (*)(int , void *, size_t))dlsym(RTLD_NEXT, "read");
+
+	char wrbuf[PATH_MAX];
+	char lnkbuf[PATH_MAX];
 	memset(wrbuf,0,PATH_MAX);
+	memset(lnkbuf,0,PATH_MAX);
+    snprintf(wrbuf,PATH_MAX,"/proc/%d/fd/%d",getpid(),fd);
+	readlink(wrbuf, lnkbuf, PATH_MAX);
+	int temp=strlen(lnkbuf);
+	lnkbuf[temp]='\n';
 	/*struct stat fileStat;
-	char fnameTest[] = "/proc/sys/fs/file-nr";
-	char* ts1 = strdup(fnameTest); // str duplicate, no need to free mem!
+	char* ts1 = strdup(lnkbuf); // str duplicate, no need to free mem!
 	stat( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
 
 	if ( (fileStat.st_mode & S_IWUSR) == 0 &&  (fileStat.st_mode & S_IRUSR) )
@@ -158,72 +228,37 @@ extern "C" int open(char* fname, int flags, ...)
 		wrbuf[2]='\n';
 		printDebug(wrbuf);
 	}*/
+	
 
-	wrbuf[0]='\n';
-	wrbuf[1]='-';
-	wrbuf[2]='-';
-	wrbuf[3]='\n';	
-	printDebug(wrbuf);
-	printDebug(fname);
-	wrbuf[0]='\n';
-	wrbuf[1]='+';
-	wrbuf[2]='+';
-	wrbuf[3]='\n';	
-    printDebug(wrbuf);
-    
-    mode_t a;
-    va_list ap;
-    va_start(ap, flags);
-    a = va_arg(ap, mode_t);
-    va_end(ap);
-    if (a!=0)
-    	return (*orig_open)(fname, flags, a );
-    else
-    	return (*orig_open)(fname, flags );
+	if ( false==isBlacklisted(lnkbuf) )
+	{
+		wrbuf[0]='\n';
+		wrbuf[1]='L';
+		wrbuf[2]='N';
+		wrbuf[3]='R';
+		wrbuf[4]='\n';
+		wrbuf[5]=0;
+		//wrbuf[0]=wrbuf[6];
+		//wrbuf[1]=wrbuf[7];
+		//wrbuf[2]=wrbuf[8];
+		//wrbuf[3]=wrbuf[9];
+		//wrbuf[4]='\n';
+		//wrbuf[5]=0;
+		printDebug(wrbuf);
+		printDebug(lnkbuf);
+		return (*orig_read)(fd, buf, count);
+	}
+	else
+	{	
+		return (*orig_read)(fd, buf, count);	
+	}
+	
 
 }
-/*extern "C" int open(char* fname, int flags, mode_t aMode)
-{
-	// !! Seems that a java app won't call this function on file open
-	// inside the app.
-	// On the other hand, java.exe seems to call open, e.g to open the jar file
-	// to be executed.
-	
-	if ( orig_write == NULL )
-        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
-	if ( orig_open == NULL )
-        orig_open = (ssize_t (*)(char* , int, mode_t))dlsym(RTLD_NEXT, "open");
 
-	// test on RO dir path of a file  (use dirname)
-    char wrbuf[PATH_MAX];
-	memset(wrbuf,0,PATH_MAX);
-	struct stat fileStat;
-	char fnameTest[] = "/proc/sys/fs/file-nr";
-	char* ts1 = strdup(fnameTest); // str duplicate, no need to free mem!
-	stat( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
 
-	if ( (fileStat.st_mode & S_IWUSR) == 0 &&  (fileStat.st_mode & S_IRUSR) )
-	{
-		wrbuf[0]='R';
-		wrbuf[1]='O';
-		wrbuf[2]='\n';
-		printDebug(wrbuf);
-	}
 
-	wrbuf[0]='\n';
-	wrbuf[1]='-';
-	wrbuf[2]='-';
-	wrbuf[3]='\n';	
-	printDebug(wrbuf);
-	printDebug(fname);
-	wrbuf[0]='\n';
-	wrbuf[1]='+';
-	wrbuf[2]='+';
-	wrbuf[3]='\n';	
-    printDebug(wrbuf);
-	   
-	return (*orig_open)(fname, flags, aMode);
-}*/
+
 
 extern "C" int fcntl(int fd, int cmd, ...)
 {
@@ -377,57 +412,6 @@ extern "C" FILE *fopen(const char *pathname, const char *mode)
 	return (*orig_fopen)(pathname, mode);
 }
 
-#if 0
-extern "C" int stat(const char *path, struct stat *buf)
-{
-	if ( orig_write == NULL )
-        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
-	if ( orig_stat == NULL )
-        orig_stat = (int (*)(const char* ,struct stat *))dlsym(RTLD_NEXT, "stat");
-
-	// !! Seems that a java app won't call this function on file open
-	// inside the app.
-	// On the other hand, java.exe seems to call open, e.g to open the jar file
-	// to be executed.
-	
-	// test on RO dir path of a file  (use dirname)
-	char wrbuf[PATH_MAX];
-	memset(wrbuf,0,PATH_MAX);
-	struct stat fileStat;
-	char* ts1 = strdup(path); // str duplicate, no need to free mem!
-	//if (orig_stat)
-	//	(*orig_stat)( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
-	//else
-	//	stat( dirname(ts1), &fileStat); // dirname in #include <libgen.h>
-
-	if ( (fileStat.st_mode & S_IWUSR) == 0 &&  (fileStat.st_mode & S_IRUSR) )
-	{
-		wrbuf[0]='S';
-		wrbuf[1]='U';
-		wrbuf[2]='\n';
-		printDebug(wrbuf);
-	}
-
-	wrbuf[0]='\n';
-	wrbuf[1]='S';
-	wrbuf[2]='T';
-	wrbuf[3]='\n';	
-	printDebug(wrbuf);
-	if(path) printDebug((char*)path);
-	wrbuf[0]='\n';
-	wrbuf[1]='T';
-	wrbuf[2]='S';
-	wrbuf[3]='\n';	
-    printDebug(wrbuf);
-	/*if(orig_stat)
-		return (*orig_stat)(path, buf);
-	else
-		return 0;*/
-    return 1;
-}
-#endif
-
-
 extern "C" int __xstat(int ver, const char * path, struct stat * stat_buf)
 {
 	if ( orig_write == NULL )
@@ -480,6 +464,6 @@ extern "C" int __xstat(int ver, const char * path, struct stat * stat_buf)
     return (*orig__xstat)(ver, path, stat_buf);
 
 }
-
+#endif // _THIS_HOOK_USED_
 
 

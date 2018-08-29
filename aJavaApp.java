@@ -6,7 +6,8 @@ public class aJavaApp {
         // The name of the file to open.
         
         //String fileName = "/proc/textJavaApp.preloadtest";
-        String fileName = "textJavaApp.preloadtest";
+        
+        String fileName = args[0] + "/textJavaApp.preloadtest";
         try {
         	String data = "This is the text content random number=";
 			Random rand = new Random();
@@ -14,7 +15,7 @@ public class aJavaApp {
         	data += Integer.toString(nAtRandom);
         	data += "\n";
 	        
-        	RandomAccessFile file = new RandomAccessFile(fileName,"rwd");
+        	RandomAccessFile file = new RandomAccessFile(fileName,"rw");
 	        file.seek(0);
 			//file.write(file.getFD().toString().getBytes());
 	        file.write(data.getBytes());
