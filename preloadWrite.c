@@ -2,7 +2,9 @@
 #include<sys/stat.h>
 #include<sys/types.h>
 #include <dlfcn.h>
-#include <string.h>
+#include <cstring>
+#include <string>
+#include <map>
 #include <unistd.h>
 #include <stdio.h>
 #include <limits.h>
@@ -17,10 +19,15 @@ int (*orig_open)(char* , int, ... ) = NULL;
 int (*orig_open64)(char* , int, mode_t ) = NULL;
 int (*orig_ioctl)(int d , unsigned long request,...) = NULL;
 int (*orig_fcntl)(int fd , int cmd,...) = NULL;
+int (*orig_close)(int fd) = NULL;
 FILE* (*orig_fopen)(const char* , const char* ) = NULL;
 int (*orig__xstat)(int ver, const char * path, struct stat * stat_buf)=NULL; // ver=3 --> normal stat()
 
 char blackListedStr[][256]={"hsperfdata",".jar","/jre"};
+
+int anIndex = 0;
+std::string fname_mod="";
+std::map<int,std::string> mapOfFiles;
 
 bool isBlacklisted(char* aName)
 {
@@ -42,6 +49,28 @@ void printDebug(char* printThis)
 	(*orig_write)(1,printThis,strlen(printThis));
 }
 
+extern "C" int close(int fd)
+{
+	if ( orig_write == NULL )
+        orig_write = (ssize_t (*)(int , const void *, size_t))dlsym(RTLD_NEXT, "write");
+	if ( orig_close == NULL )
+        orig_close = (int (*)(int))dlsym(RTLD_NEXT, "close");
+    
+	if (mapOfFiles.find(fd)!=mapOfFiles.end())
+	{
+		char wrbuf[PATH_MAX];
+		memset(wrbuf,0,PATH_MAX);
+		wrbuf[0]='\n';
+		wrbuf[1]='C';
+		wrbuf[2]='L';
+		wrbuf[3]='\n';	
+		printDebug(wrbuf);	
+		mapOfFiles.erase( mapOfFiles.find(fd) );
+		
+	}
+	return (*orig_close)(fd);
+	
+}
 
 // Hook for java app (large files)
 extern "C" int open64(char* fname, int flags, mode_t mode)
@@ -91,8 +120,21 @@ extern "C" int open64(char* fname, int flags, mode_t mode)
 		} 
     
     }
-   	
-    return (*orig_open64)(fname, flags, mode );
+    std::string inputfn = std::string(fname);
+    if (inputfn.find("textJavaApp.preloadtest")<inputfn.length())
+    {
+		// funny : we can change the name of the file proposed in the java app
+    	anIndex++;
+		fname_mod = "modified_file_" + std::to_string(anIndex);
+		int ret = (*orig_open64)((char*)fname_mod.c_str(), flags, mode );
+		// store the original filename at key equal to new filename's descriptor
+		mapOfFiles[ret] = inputfn;
+		return ret;
+    }
+    else
+    {
+		return (*orig_open64)(fname, flags, mode );
+  	}
 
 }
 
@@ -176,7 +218,7 @@ extern "C" ssize_t write(int fd, const void *buf, size_t count)
 		printDebug(wrbuf);
 	}
 	
-	if (false==isBlacklisted(lnkbuf))
+	if ((false==isBlacklisted(lnkbuf)) && (mapOfFiles.find(fd)!=mapOfFiles.end()))
 	{
 		wrbuf[0]='\n';
 		wrbuf[1]='L';

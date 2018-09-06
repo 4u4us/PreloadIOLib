@@ -17,7 +17,7 @@ public class aJavaApp {
 	        
         	RandomAccessFile file = new RandomAccessFile(fileName,"rw");
 	        file.seek(0);
-			//file.write(file.getFD().toString().getBytes());
+			file.write(file.getFD().toString().getBytes());
 	        file.write(data.getBytes());
 	        file.close();
 		} catch (IOException e) {

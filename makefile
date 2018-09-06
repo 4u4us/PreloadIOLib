@@ -6,4 +6,4 @@ all:
 	
 
 clean:
-	rm *.o *.so a.out core *.preloadtest *.class *.jar
+	rm *.o *.so a.out core /home/${USER}/*.preloadtest *.preloadtest *.class *.jar modified_file_*

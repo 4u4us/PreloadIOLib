@@ -4,7 +4,7 @@ echo !!! JVM + JDK expected in location:
 echo /home/${USER}/zulu8.30.0.1-jdk8.0.172-linux_i686
 echo !!!
 
-sleep 3s
+sleep 1s
 
 make clean
 
@@ -23,7 +23,7 @@ echo "___________________________"
 echo "JAVA Result"
 echo "___________________________"
 more /home/${USER}/textJavaApp.preloadtest 
-
+more modified_file_1
 echo "___________________________"
 echo "___________________________"
 echo "LINUX"
